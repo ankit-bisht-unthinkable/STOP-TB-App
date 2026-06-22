@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Relation
 import org.piramalswasthya.stoptb.configuration.FormDataModel
 import org.piramalswasthya.stoptb.database.room.SyncState
+import org.piramalswasthya.stoptb.database.shared_preferences.PreferenceDao
 import org.piramalswasthya.stoptb.network.TBSuspectedDTO
 import kotlin.Boolean
 import org.piramalswasthya.stoptb.model.dynamicEntity.FormResponseEntity

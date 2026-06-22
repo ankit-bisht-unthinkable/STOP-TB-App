@@ -53,7 +53,9 @@ ListAdapter<BenWithTbSuspectedDomain, TbConfirmedListAdapter.BenViewHolder>
             binding.ivSyncState.visibility = if (item.tbConfirmedList == null) View.INVISIBLE else View.VISIBLE
             val role = pref?.getLoggedInUser()?.role
             role?.let{
-                checkIfCounsellingOfficerOrNot(it)
+                checkIfCounsellingOfficerOrNot(
+                    it, item.isCounselled
+                )
             }
             if (item.ben.spouseName == "Not Available" && item.ben.fatherName == "Not Available") {
                 binding.father = true
@@ -91,8 +93,17 @@ ListAdapter<BenWithTbSuspectedDomain, TbConfirmedListAdapter.BenViewHolder>
 
         }
 
-        private fun checkIfCounsellingOfficerOrNot(role : String){
-            binding.btnCounselling.visibility = if(role.isCounsellingOfficerRole()) View.VISIBLE else View.GONE
+        private fun checkIfCounsellingOfficerOrNot(
+            role: String,
+            isCounselled: Boolean
+        ) {
+            val isCounsellingOfficer = role.isCounsellingOfficerRole()
+
+            binding.btnCounselling.visibility =
+                if (isCounsellingOfficer && !isCounselled) View.VISIBLE else View.GONE
+
+            binding.tvCounsellingStatus.visibility =
+                if (isCounsellingOfficer && isCounselled) View.VISIBLE else View.GONE
         }
     }
 
