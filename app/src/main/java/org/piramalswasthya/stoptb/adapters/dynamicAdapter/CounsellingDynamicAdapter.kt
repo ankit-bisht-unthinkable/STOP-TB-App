@@ -45,7 +45,7 @@ class CounsellingDynamicAdapter(
         return visibleQuestions[position].questionId.toLong()
     }
 
-    fun submitList(newList: List<CounsellingQuestionDto>) {
+    fun submitList(newList: List<CounsellingQuestionDto>, editable: Boolean = true) {
         questions = newList
         isEditable = editable
         visibleQuestions = questions.filter { it.visible }.sortedBy { it.displayOrder }
