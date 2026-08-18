@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.piramalswasthya.stoptb.repositories.TBRepo
 import org.piramalswasthya.stoptb.database.shared_preferences.PreferenceDao
-import org.piramalswasthya.stoptb.database.room.SyncState
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
@@ -73,12 +72,16 @@ class DiagnosticResultPollWorker @AssistedInject constructor(
                 if (hasInProgress) {
                     val pollDelaySec = 60L
                     Timber.d("Scheduling next DiagnosticResultPollWorker run in ${pollDelaySec}s")
+                    val constraints = androidx.work.Constraints.Builder()
+                        .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                        .build()
                     val pollRequest = OneTimeWorkRequestBuilder<DiagnosticResultPollWorker>()
                         .setInitialDelay(pollDelaySec, TimeUnit.SECONDS)
+                        .setConstraints(constraints)
                         .build()
                     WorkManager.getInstance(appContext).enqueueUniqueWork(
                         name,
-                        ExistingWorkPolicy.REPLACE,
+                        ExistingWorkPolicy.APPEND_OR_REPLACE,
                         pollRequest
                     )
                 } else {
@@ -88,6 +91,7 @@ class DiagnosticResultPollWorker @AssistedInject constructor(
                 Result.success()
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Timber.e(e, "Error inside DiagnosticResultPollWorker")
             Result.failure()
         }

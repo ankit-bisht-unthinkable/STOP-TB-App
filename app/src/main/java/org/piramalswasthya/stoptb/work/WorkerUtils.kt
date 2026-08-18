@@ -207,7 +207,12 @@ object WorkerUtils {
     }
 
     fun triggerDiagnosticResultPollWorker(context: Context) {
-        val workRequest = OneTimeWorkRequestBuilder<DiagnosticResultPollWorker>().build()
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val workRequest = OneTimeWorkRequestBuilder<DiagnosticResultPollWorker>()
+            .setConstraints(constraints)
+            .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             DiagnosticResultPollWorker.name, ExistingWorkPolicy.REPLACE, workRequest
         )
