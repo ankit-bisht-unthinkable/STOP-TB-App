@@ -3570,7 +3570,13 @@ class TBRepo @Inject constructor(
             }
         }
         val synced = cache.copy(syncState = SyncState.SYNCED)
-        tbDao.saveTbDiagnostics(synced)
+        // A poll that brings nothing new (e.g. an order still PENDING) used to rewrite the same
+        // row on every cycle. Room invalidates per table, so each of those no-op writes re-ran
+        // every query observing TB_DIAGNOSTICS - at 1,000+ pending orders that kept the
+        // connection pool saturated (performance-reports/baseline-5k/poll-scale-1000plus.md).
+        if (synced != existing) {
+            tbDao.saveTbDiagnostics(synced)
+        }
         synced
         }
 

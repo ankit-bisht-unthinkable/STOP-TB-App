@@ -229,10 +229,18 @@ class DashboardFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.setDashboardVisible(true)
         (activity as? HomeActivity)?.updateActionBar(
             R.drawable.ic_dashboard,
             getString(R.string.dashboard)
         )
+    }
+
+    override fun onPause() {
+        // ViewPager2 keeps this page STARTED but not RESUMED while the Home tab is shown, and
+        // the whole home destination is paused when the user navigates elsewhere.
+        viewModel.setDashboardVisible(false)
+        super.onPause()
     }
 
     override fun onDestroyView() {

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
@@ -49,7 +50,10 @@ class CdFragment : Fragment() {
             IconGridAdapter.GridIconClickListener {
                 findNavController().navigateSafe(it)
             },
-            viewModel.scope
+            // View lifecycle, not viewModelScope: the counts must stop when this screen's view is
+            // destroyed, or each return here adds another set of live count queries
+            // (performance-reports/baseline-5k/tb-cards-analysis.md).
+            viewLifecycleOwner.lifecycleScope
         )
         binding.rvIconGrid.adapter = iconAdapter
         iconAdapter.submitList(iconDataset.getCDDataset(resources))

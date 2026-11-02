@@ -184,11 +184,11 @@ class RecordsRepo @Inject constructor(
 
     val tbSuspectedList get() = benDao.getTbScreeningList(selectedVillage)
         .map { list -> list.map { it.asTbSuspectedDomainModel() } }
-    val tbSuspectedListCount get() = tbSuspectedList.map { it.size }
+    val tbSuspectedListCount get() = benDao.getTbSuspectedListCount(selectedVillage)
 
     val tbConfirmedList get() = benDao.getTbConfirmedList(selectedVillage)
         .map { list -> list.map { it.asTbSuspectedDomainModel() } }
-    val tbConfirmedListCount get() = tbConfirmedList.map { it.size }
+    val tbConfirmedListCount get() = benDao.getTbConfirmedListCount(selectedVillage)
 
     val leprosySuspectedListCount get() = benDao.getLeprosyScreeningBenCountBySymptoms(selectedVillage, 0)
     val leprosyConfirmedCasesListCount get() = benDao.getConfirmedLeprosyCaseCount(selectedVillage = selectedVillage)

@@ -5,9 +5,13 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import org.piramalswasthya.stoptb.database.room.dao.BenDao
@@ -169,6 +173,21 @@ class DashboardViewModel @Inject constructor(
     val coverage: LiveData<CoverageStats> get() = _coverage
 
     private var collectJobs = mutableListOf<Job>()
+
+    // The dashboard is a page of the home ViewPager2, so this ViewModel stays alive while the user
+    // is on any other screen. Its ~79 count queries all observe the TB/beneficiary tables, and
+    // left running they re-ran on every write - 99% of all SQL while diagnostic results were
+    // polling (performance-reports/baseline-5k/poll-scale-1000plus.md). They now run only while
+    // the dashboard page is resumed; the LiveData keeps the last counts in between.
+    private val isDashboardVisible = MutableStateFlow(false)
+
+    fun setDashboardVisible(visible: Boolean) {
+        isDashboardVisible.value = visible
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun <T> Flow<T>.whileDashboardVisible(): Flow<T> =
+        isDashboardVisible.flatMapLatest { visible -> if (visible) this else emptyFlow() }
 
     init {
         loadDashboardData()
@@ -408,6 +427,7 @@ class DashboardViewModel @Inject constructor(
 
         collectJobs += viewModelScope.launch {
             benDao.getVillageHeadcount(populationVillageIds(selectedVillageId, selectedVillage))
+                .whileDashboardVisible()
                 .collect { headcount ->
                     _coverage.value = CoverageStats(
                         population = headcount.population,
@@ -469,7 +489,7 @@ class DashboardViewModel @Inject constructor(
                     others = values[4],
                     seniorCitizen = values[5]
                 )
-            }.collect { breakdown ->
+            }.whileDashboardVisible().collect { breakdown ->
                 target.value = breakdown
             }
         }

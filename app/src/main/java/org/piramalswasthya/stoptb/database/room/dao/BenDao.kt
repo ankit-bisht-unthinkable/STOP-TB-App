@@ -57,6 +57,59 @@ private const val LIQUID_CULTURE_REFERRAL_CONDITION = """(
     )
 )"""
 
+/**
+ * FROM/WHERE of the Presumptive TB cases list ([BenDao.getTbScreeningList]). Shared with
+ * [BenDao.getTbSuspectedListCount] so the card count can never disagree with the list.
+ * (A former `OR age <= 5` branch was commented out of this predicate; it is intentionally absent.)
+ */
+private const val PRESUMPTIVE_TB_FROM_WHERE = """
+    FROM BEN_BASIC_CACHE b
+    INNER JOIN tb_screening t ON b.benId = t.benId
+    LEFT JOIN TB_SUSPECTED ts ON b.benId = ts.benId
+    LEFT JOIN TB_DIAGNOSTICS td ON b.benId = td.benId
+    WHERE villageId = :villageId AND isDeactivate = 0 AND b.isDeath = 0 AND (
+        t.bloodInSputum = 1
+        OR t.coughMoreThan2Weeks = 1
+        OR t.feverMoreThan2Weeks = 1
+        OR t.riseOfFever = 1
+        OR t.lossOfAppetite = 1
+        OR t.lossOfWeight = 1
+        OR t.nightSweats = 1
+        OR t.historyOfTb = 1
+        OR t.takingAntiTBDrugs = 1
+        OR t.familySufferingFromTB = 1
+        OR UPPER(IFNULL(ts.chestXRayResult, '')) IN ('POSITIVE', 'TB PRESUMPTIVE', 'ABNORMAL BUT NOT TB PRESUMPTIVE')
+        OR UPPER(IFNULL(td.chestXRayResult, '')) IN ('POSITIVE', 'TB PRESUMPTIVE', 'ABNORMAL BUT NOT TB PRESUMPTIVE')
+    ) AND IFNULL(ts.isConfirmed, 0) = 0
+    AND NOT EXISTS (
+        SELECT 1 FROM TB_CONFIRMED_TREATMENT tc WHERE tc.benId = b.benId
+    ) AND NOT (
+        UPPER(IFNULL(td.naatResult, '')) IN ('POSITIVE', 'MTB DETECTED', 'TB POSITIVE')
+        OR UPPER(IFNULL(td.liquidCultureResult, '')) = 'POSITIVE'
+    )
+"""
+
+/**
+ * FROM/WHERE of the Confirmed TB cases list ([BenDao.getTbConfirmedList]), shared with
+ * [BenDao.getTbConfirmedListCount].
+ */
+private const val CONFIRMED_TB_FROM_WHERE = """
+    FROM BEN_BASIC_CACHE b
+    LEFT JOIN TB_SUSPECTED ts
+        ON b.benId = ts.benId
+    LEFT JOIN TB_DIAGNOSTICS td
+        ON b.benId = td.benId
+    WHERE b.villageId = :villageId
+      AND b.isDeactivate = 0
+      AND b.isDeath = 0
+      AND (
+            ts.isTbConfirmed = 1
+            OR td.isTbConfirmed = 1
+            OR UPPER(IFNULL(td.naatResult, '')) IN ('POSITIVE', 'MTB DETECTED', 'TB POSITIVE')
+            OR UPPER(IFNULL(td.liquidCultureResult, '')) = 'POSITIVE'
+          )
+"""
+
 @Dao
 interface BenDao {
 
@@ -1510,50 +1563,25 @@ interface BenDao {
     fun getScreeningList(villageId: Int): Flow<List<BenBasicCache>>
 
     @Transaction
-    @Query("select b.* from BEN_BASIC_CACHE b inner join tb_screening t on b.benId = t.benId LEFT JOIN TB_SUSPECTED ts ON b.benId = ts.benId LEFT JOIN TB_DIAGNOSTICS td ON b.benId = td.benId where villageId = :villageId and isDeactivate=0 and b.isDeath = 0 and (\n" +
-            "            t.bloodInSputum = 1\n" +
-            "            OR t.coughMoreThan2Weeks = 1\n" +
-            "            OR t.feverMoreThan2Weeks = 1\n" +
-            "            OR t.riseOfFever = 1\n" +
-            "            OR t.lossOfAppetite = 1\n" +
-            "            OR t.lossOfWeight = 1\n" +
-            "            OR t.nightSweats = 1\n" +
-            "            OR t.historyOfTb = 1\n" +
-            "            OR t.takingAntiTBDrugs = 1\n" +
-            "            OR t.familySufferingFromTB = 1\n" +
-//            "            OR CAST((strftime('%s','now') - b.dob/1000)/60/60/24/365 AS INTEGER) <= 5\n" +
-            "            OR UPPER(IFNULL(ts.chestXRayResult, '')) IN ('POSITIVE', 'TB PRESUMPTIVE', 'ABNORMAL BUT NOT TB PRESUMPTIVE')\n" +
-            "            OR UPPER(IFNULL(td.chestXRayResult, '')) IN ('POSITIVE', 'TB PRESUMPTIVE', 'ABNORMAL BUT NOT TB PRESUMPTIVE')\n" +
-            "        ) AND IFNULL(ts.isConfirmed, 0) = 0\n" +
-            "        AND NOT EXISTS (\n" +
-            "            SELECT 1 FROM TB_CONFIRMED_TREATMENT tc WHERE tc.benId = b.benId\n" +
-            "        ) AND NOT (\n" +
-            "            UPPER(IFNULL(td.naatResult, '')) IN ('POSITIVE', 'MTB DETECTED', 'TB POSITIVE')\n" +
-            "            OR UPPER(IFNULL(td.liquidCultureResult, '')) = 'POSITIVE'\n" +
-            "        ) GROUP BY b.benId")
+    @Query("SELECT b.* $PRESUMPTIVE_TB_FROM_WHERE GROUP BY b.benId")
     fun getTbScreeningList(villageId: Int): Flow<List<BenWithTbSuspectedCache>>
 
+    // The card count used to be getTbScreeningList(...).map { it.size }: a full @Transaction
+    // load of every presumptive beneficiary plus three @Relation tables, just to show a number
+    // (~470 ms of the Tuberculosis screen's load, performance-reports/baseline-5k/tb-cards-analysis.md).
+    // One row per benId in the list (GROUP BY), so counting the grouped benIds gives the same number.
+    @Query("SELECT COUNT(*) FROM (SELECT b.benId $PRESUMPTIVE_TB_FROM_WHERE GROUP BY b.benId)")
+    fun getTbSuspectedListCount(villageId: Int): Flow<Int>
+
     @Transaction
-    @Query("""
-    SELECT DISTINCT b.*
-    FROM BEN_BASIC_CACHE b
-    LEFT JOIN TB_SUSPECTED ts
-        ON b.benId = ts.benId
-    LEFT JOIN TB_DIAGNOSTICS td
-        ON b.benId = td.benId
-    WHERE b.villageId = :villageId
-      AND b.isDeactivate = 0
-      AND b.isDeath = 0 
-      AND (
-            ts.isTbConfirmed = 1
-            OR td.isTbConfirmed = 1
-            OR UPPER(IFNULL(td.naatResult, '')) IN ('POSITIVE', 'MTB DETECTED', 'TB POSITIVE')
-            OR UPPER(IFNULL(td.liquidCultureResult, '')) = 'POSITIVE'
-          )
-""")
+    @Query("SELECT DISTINCT b.* $CONFIRMED_TB_FROM_WHERE")
     fun getTbConfirmedList(
         villageId: Int
     ): Flow<List<BenWithTbSuspectedCache>>
+
+    // BEN_BASIC_CACHE has one row per benId, so DISTINCT b.* and DISTINCT b.benId count the same rows.
+    @Query("SELECT COUNT(DISTINCT b.benId) $CONFIRMED_TB_FROM_WHERE")
+    fun getTbConfirmedListCount(villageId: Int): Flow<Int>
 
     @Query("""
         SELECT COUNT(DISTINCT b.benId)
